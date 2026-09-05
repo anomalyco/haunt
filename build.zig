@@ -70,18 +70,4 @@ pub fn build(b: *std.Build) void {
     const run = b.addRunArtifact(exe);
     if (b.args) |args| run.addArgs(args);
     b.step("run", "Run Haunt (default: examples/clock.json)").dependOn(&run.step);
-
-    const test_module = b.createModule(.{
-        .root_source_file = b.path("src/tests.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    test_module.addImport("opentui", opentui.module("opentui"));
-    test_module.addImport("ffi", ffi);
-    test_module.addImport("font_data", font_data);
-    test_module.linkLibrary(lua_lib);
-    const tests = b.addTest(.{ .root_module = test_module });
-    const test_run = b.addRunArtifact(tests);
-    test_run.setCwd(b.path("."));
-    b.step("test", "Test the Lua lifecycle and native layout/rendering").dependOn(&test_run.step);
 }

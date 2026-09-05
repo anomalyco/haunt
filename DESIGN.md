@@ -3,7 +3,7 @@
 Status: accepted product design baseline, 2026-09-05.
 
 The first native clock prototype is now implemented. See [README.md](README.md)
-for running and verification commands, and [the Lua API](docs/lua.md) for the
+for running and build commands, and [the Lua API](docs/lua.md) for the
 currently implemented framework surface. The broader milestones below remain the
 product direction.
 

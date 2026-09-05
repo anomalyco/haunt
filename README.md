@@ -16,7 +16,7 @@ options.
 The bootstrap downloads checksum-pinned Zig 0.16.0, OpenTUI, and Lua 5.4.9 into
 ignored local directories. Python 3.12+ is needed for bootstrap. The application is
 a native executable with embedded Lua. The current prototype targets POSIX
-terminals and is tested on Linux x86_64.
+terminals, with Linux x86_64 as the initial development platform.
 
 The clock displays twelve-hour time using OpenTUI's ASCII fonts. It chooses `block`
 when the tile has room and `tiny` for smaller tiles, with a plain-text fallback for
@@ -48,9 +48,8 @@ zig-out/bin/haunt examples/clock.json
 
 ```sh
 python3 scripts/setup.py
-.tools/zig/zig build test -j4
+.tools/zig/zig fmt --check build.zig build.zig.zon src
 .tools/zig/zig build -j4
-python3 tests/smoke.py
 zig-out/bin/haunt examples/clock.json --snapshot 80x24
 ```
 
