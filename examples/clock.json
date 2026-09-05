@@ -11,9 +11,9 @@
       "id": "clock-block",
       "widget": "../widgets/clock.lua",
       "rect": {
-        "x": 45,
-        "y": 3,
-        "width": 31,
+        "x": 0,
+        "y": 0,
+        "width": 32,
         "height": 4
       },
       "options": {
@@ -25,9 +25,9 @@
       "id": "audio-outputs",
       "widget": "../widgets/audio-outputs.lua",
       "rect": {
-        "x": 39,
-        "y": 25,
-        "width": 38,
+        "x": 0,
+        "y": 19,
+        "width": 32,
         "height": 3
       },
       "options": {}
@@ -36,10 +36,21 @@
       "id": "calendar",
       "widget": "../widgets/calendar.lua",
       "rect": {
-        "x": 43,
-        "y": 10,
-        "width": 31,
+        "x": 0,
+        "y": 5,
+        "width": 32,
         "height": 13
+      },
+      "options": {}
+    },
+    {
+      "id": "system-monitor",
+      "widget": "../widgets/system-monitor.lua",
+      "rect": {
+        "x": 0,
+        "y": 22,
+        "width": 32,
+        "height": 11
       },
       "options": {}
     }

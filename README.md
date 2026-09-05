@@ -65,6 +65,10 @@ and calendar colors.
 Play, Pause, and Next controls through `playerctl`. The playing/paused action uses
 the active background color.
 
+`widgets/system-monitor.lua` reads Linux `/proc` directly and renders CPU and memory
+history as btop-style vertical block charts. It retains a bounded sample history and
+does not spawn a process for each refresh.
+
 After building, run `zig-out/bin/haunt [layout.json]` directly. For an optimized build:
 
 ```sh
