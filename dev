@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+cd "$(dirname "$0")"
+python3 scripts/setup.py
+exec .tools/zig/zig build run -j4 -- "$@"

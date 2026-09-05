@@ -1,0 +1,10 @@
+.{
+    .name = .haunt,
+    .version = "0.1.0",
+    .fingerprint = 0x12d60240a5e4d17a,
+    .minimum_zig_version = "0.16.0",
+    .dependencies = .{
+        .opentui = .{ .path = ".deps/opentui/packages/native" },
+    },
+    .paths = .{ "build.zig", "build.zig.zon", "src", "widgets", "examples", "tests" },
+}

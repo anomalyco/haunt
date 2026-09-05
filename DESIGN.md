@@ -2,6 +2,11 @@
 
 Status: accepted product design baseline, 2026-09-05.
 
+The first native clock prototype is now implemented. See [README.md](README.md)
+for running and verification commands, and [the Lua API](docs/lua.md) for the
+currently implemented framework surface. The broader milestones below remain the
+product direction.
+
 Haunt is an Anomaly project: a full-screen terminal workspace for programmable
 widgets. Users describe widgets in natural language, then place, configure, and
 use them in saved dashboards. A terminal can itself be a widget; the product's
@@ -12,6 +17,9 @@ primary unit is a widget with its own content and interaction.
 - A stable, directly editable grid. Users click, drag, and resize widgets.
 - All widget regions fit within one terminal viewport. Workspace scrolling is
   deferred.
+- The normal workspace is content-only: borders are optional, and application
+  headers, widget title bars, and footer/help text are absent. Layout editing uses
+  temporary overlays.
 - Data updates preserve widget positions and allocated sizes. Spatial memory is
   a core part of the experience.
 - Layouts are file-backed, serializable, and switchable. Widget instances have
@@ -29,8 +37,10 @@ primary unit is a widget with its own content and interaction.
 
 The workspace owns every widget instance's position and allocation. Each widget
 receives a content rectangle in terminal columns and rows and controls its internal
-presentation through the OpenTUI primitive API. Host borders and controls are
-accounted for before computing that usable rectangle.
+presentation through the OpenTUI primitive API. Optional persistent borders are
+accounted for before computing that usable rectangle. Editing overlays preserve
+content dimensions. The grid uses the full viewport, including the first and last
+terminal rows.
 
 The layout stores integer positions and spans in a logical grid. Grid units are
 independent of terminal character cells: the host resolves grid tracks against the
@@ -56,8 +66,8 @@ policy remains an implementation design question.
 The interaction target is immediate, discoverable mouse-based editing:
 
 1. Click a widget to focus/select it while preserving its content's own interactions.
-2. Drag a host-owned header or move handle to reposition it.
-3. Drag an edge or corner to resize it.
+2. Enter layout-edit mode (`e`) and drag inside a tile to reposition it.
+3. Drag an outlined edge or corner to resize it.
 4. Show the snapped destination and whether it fits during the gesture.
 5. Commit a valid placement on release; Escape cancels the gesture.
 6. Save completed edits automatically.
@@ -69,6 +79,25 @@ the running widget's identity and state.
 The workspace enforces bounds and non-overlap. Content changes do not trigger
 automatic repacking. The occupied-cell interaction, including whether a drop
 previews a swap, still needs to be finalized. Empty grid space is allowed.
+
+### Frame presentation
+
+Frames are an optional host-owned wrapper, controlled by the dashboard-wide
+`appearance.borders` setting in the layout file. The default is borderless.
+Widget authors can rely on Haunt to provide the outer frame when the user wants it.
+
+- A bordered dashboard applies consistent outer frames across its widget instances.
+- A borderless dashboard gives each widget its full allocated content rectangle.
+- Layout-edit mode temporarily overlays outlines and resize handles. Entering this
+  mode preserves content dimensions and running state; editing overlays capture
+  layout gestures. `b` toggles and saves persistent borders while editing.
+- Content-area borders remain ordinary widget primitives for internal sections.
+- Treat frame drawing as a host presentation wrapper, independent of the widget's
+  application logic. Host ownership does not require a hardcoded visual style.
+
+The prototype implements borderless presentation, optional outlines without title
+bars, temporary edit overlays, and full-viewport placement. Errors use an affected
+tile's marker/diagnostic rather than a permanent status bar.
 
 ## Saved layouts and widget instances
 

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "id": "clock",
+  "name": "Clock",
+  "grid": {
+    "columns": 12,
+    "rows": 12
+  },
+  "widgets": [
+    {
+      "id": "local-clock",
+      "widget": "../widgets/clock.lua",
+      "rect": {
+        "x": 1,
+        "y": 7,
+        "width": 3,
+        "height": 2
+      },
+      "options": {
+        "timezone": "local"
+      }
+    }
+  ]
+}
