@@ -29,6 +29,7 @@ const Widget = struct {
 
 const Drag = struct {
     index: usize,
+    // Gesture geometry and pointer deltas are always in terminal cells.
     original: Rect,
     candidate: Rect,
     start_x: i32,
@@ -202,49 +203,42 @@ const App = struct {
             }
         }
         if (self.drag) |drag| {
-            const ghost = self.layout.parsed.value.pixels(drag.candidate, self.renderer.width, self.renderer.height);
+            const ghost = drag.candidate;
             try buffer.drawBox(@intCast(ghost.x), @intCast(ghost.y), ghost.width, ghost.height, &ui.rounded, .{ .top = true, .right = true, .bottom = true, .left = true }, if (drag.valid) ui.accent else ot.rgbColor(235, 111, 146, 255), ui.transparent, ui.accent, false, null, 0, null, 0);
         }
         _ = self.renderer.render(false);
     }
 
-    fn gridPoint(self: *App, mouse: input.Mouse) layout_mod.Point {
-        return self.layout.parsed.value.point(mouse.x, mouse.y, self.renderer.width, self.renderer.height);
-    }
-
     fn handleMouse(self: *App, mouse: input.Mouse) !void {
         if (self.drag) |*drag| {
-            const point = self.gridPoint(mouse);
-            const dx = point.x - drag.start_x;
-            const dy = point.y - drag.start_y;
-            const grid = self.layout.parsed.value.grid;
+            const dx = @as(i32, @intCast(mouse.x)) - drag.start_x;
+            const dy = @as(i32, @intCast(mouse.y)) - drag.start_y;
+            const width = self.renderer.width;
+            const height = self.renderer.height;
             const original = drag.original;
             var x: i32 = @intCast(original.x);
             var y_pos: i32 = @intCast(original.y);
             var right: i32 = @intCast(original.x + original.width);
             var bottom: i32 = @intCast(original.y + original.height);
             if (drag.edges == 0) {
-                x = std.math.clamp(x + dx, 0, @as(i32, @intCast(grid.columns - original.width)));
-                y_pos = std.math.clamp(y_pos + dy, 0, @as(i32, @intCast(grid.rows - original.height)));
+                x = std.math.clamp(x + dx, 0, @as(i32, @intCast(width - original.width)));
+                y_pos = std.math.clamp(y_pos + dy, 0, @as(i32, @intCast(height - original.height)));
                 right = x + @as(i32, @intCast(original.width));
                 bottom = y_pos + @as(i32, @intCast(original.height));
             } else {
                 if (drag.edges & 1 != 0) x = std.math.clamp(x + dx, 0, right - 1);
-                if (drag.edges & 2 != 0) right = std.math.clamp(right + dx, x + 1, @as(i32, @intCast(grid.columns)));
+                if (drag.edges & 2 != 0) right = std.math.clamp(right + dx, x + 1, @as(i32, @intCast(width)));
                 if (drag.edges & 4 != 0) y_pos = std.math.clamp(y_pos + dy, 0, bottom - 1);
-                if (drag.edges & 8 != 0) bottom = std.math.clamp(bottom + dy, y_pos + 1, @as(i32, @intCast(grid.rows)));
+                if (drag.edges & 8 != 0) bottom = std.math.clamp(bottom + dy, y_pos + 1, @as(i32, @intCast(height)));
             }
             drag.candidate = .{ .x = @intCast(x), .y = @intCast(y_pos), .width = @intCast(right - x), .height = @intCast(bottom - y_pos) };
-            const physical = self.layout.parsed.value.pixels(drag.candidate, self.renderer.width, self.renderer.height);
             const minimum: u32 = if (self.layout.parsed.value.appearance.borders) 3 else 1;
-            drag.valid = self.layout.parsed.value.fits(drag.candidate, drag.index) and physical.width >= minimum and physical.height >= minimum;
+            drag.valid = self.layout.parsed.value.fitsCells(drag.candidate, drag.index, width, height) and drag.candidate.width >= minimum and drag.candidate.height >= minimum;
             if (mouse.kind == .up) {
                 const completed = drag.*;
                 self.drag = null;
                 if (completed.valid) {
-                    self.layout.parsed.value.widgets[completed.index].rect = completed.candidate;
-                    self.layout.save(self.file_io) catch |err| {
-                        self.layout.parsed.value.widgets[completed.index].rect = completed.original;
+                    self.layout.placeCells(self.file_io, completed.index, completed.candidate, width, height) catch |err| {
                         try self.setMessage(@errorName(err));
                         return;
                     };
@@ -264,9 +258,7 @@ const App = struct {
                     if (mouse.x == outer.x + outer.width - 1) edges |= 2;
                     if (mouse.y == outer.y) edges |= 4;
                     if (mouse.y == outer.y + outer.height - 1) edges |= 8;
-                    const point = self.gridPoint(mouse);
-                    const original = self.layout.parsed.value.widgets[index].rect;
-                    self.drag = .{ .index = index, .original = original, .candidate = original, .start_x = point.x, .start_y = point.y, .edges = edges };
+                    self.drag = .{ .index = index, .original = outer, .candidate = outer, .start_x = @intCast(mouse.x), .start_y = @intCast(mouse.y), .edges = edges };
                     return;
                 }
             }

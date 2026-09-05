@@ -42,10 +42,17 @@ accounted for before computing that usable rectangle. Editing overlays preserve
 content dimensions. The grid uses the full viewport, including the first and last
 terminal rows.
 
-The layout stores integer positions and spans in a logical grid. Grid units are
-independent of terminal character cells: the host resolves grid tracks against the
-available viewport. Shared track edges are rounded consistently to terminal cells.
-Grid density is a layout setting; the default remains to be calibrated.
+Direct manipulation snaps to individual terminal cells: one column horizontally
+and one row vertically. Gesture coordinates and collision checks use rendered cell
+rectangles, independently of the saved layout's grid density.
+
+The layout stores integer positions and spans against a reference grid. Older
+coarse grids are resolved against the viewport as before. When an edit is committed,
+Haunt records the displayed cell rectangles and current terminal dimensions as the
+new reference grid, preserving the exact edit and the other widgets' displayed
+placement. Canceling a gesture or failing to save preserves the original layout.
+Resizing the terminal resolves shared track edges proportionally from that saved
+reference, with consistent cell rounding.
 
 Widgets can provide minimum usable dimensions and preferred initial dimensions.
 Basic text/box measurement should come from the layout machinery. Preferences
@@ -68,7 +75,7 @@ The interaction target is immediate, discoverable mouse-based editing:
 1. Click a widget to focus/select it while preserving its content's own interactions.
 2. Enter layout-edit mode (`e`) and drag inside a tile to reposition it.
 3. Drag an outlined edge or corner to resize it.
-4. Show the snapped destination and whether it fits during the gesture.
+4. Show the cell-aligned destination and whether it fits during the gesture.
 5. Commit a valid placement on release; Escape cancels the gesture.
 6. Save completed edits automatically.
 
@@ -109,7 +116,7 @@ display name, grid dimensions, and configured widget instances. Each instance ha
 - A grid rectangle.
 - JSON-serializable options.
 
-Illustrative schema and grid density:
+Illustrative schema using a coarse reference grid:
 
 ```json
 {
@@ -333,7 +340,7 @@ Validate an end-to-end native slice:
    between two layouts.
 6. Measure the native slice's idle footprint and reload behavior.
 
-Implementation details still to resolve include default grid density, occupied-cell
+Implementation details still to resolve include initial placement defaults, occupied-cell
 gestures, minimum-terminal-size handling, initial platform targets, the Lua/runtime
 versions, dependency packaging, precise SDK signatures, and the agent integration.
 

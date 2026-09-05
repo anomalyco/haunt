@@ -153,7 +153,9 @@ on each side. Widget `title` is metadata and does not produce a title bar.
 
 Press `e` to enter layout-edit mode. Temporary outlines overlay the existing
 content without changing its size; drag inside a tile to move or its edges to
-resize. Press `b` while editing to persistently toggle borders for the dashboard.
+resize in individual terminal cells. Saved edits use the current viewport as the
+reference grid, preserving exact cell placement when reopened at the same size.
+Press `b` while editing to persistently toggle borders for the dashboard.
 Escape cancels a gesture or exits editing. Widget code can also draw internal
 borders using ordinary box primitives.
 

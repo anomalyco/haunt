@@ -30,12 +30,18 @@ The normal workspace shows widget content across the entire terminal, with no
 title bars or footer. Controls are available when you need them:
 
 - Press `e` to toggle layout editing and reveal temporary outlines.
-- Drag inside a tile to move it; drag its edges/corners to resize it.
+- Drag inside a tile to move it; drag its edges/corners to resize it, one terminal
+  column or row at a time.
 - Release to save the layout. Overlapping placements are rejected.
 - Escape cancels a drag; otherwise it leaves layout editing.
 - Press `b` while editing to toggle dashboard-wide borders. This saves
   `"appearance": { "borders": true }` (or `false`) in the layout.
 - `Tab` selects a widget, `r` reloads source, and `q` / `Ctrl+C` exits.
+
+Dragging and resizing use terminal-cell precision regardless of the layout's
+stored grid density. Saving an edit records exact cell rectangles with the current
+viewport as the reference grid. Existing layouts retain their displayed placement,
+and terminal resizing still scales the saved arrangement proportionally.
 
 Invalid widget revisions preserve the working content with a small error marker;
 enter layout editing to see the diagnostic in the affected tile.
