@@ -71,6 +71,17 @@ execution-time guard for accidental runaway Lua loops. Blocking operations and
 native calls need separate scheduling; the design's asynchronous filesystem/HTTP
 services are a subsequent framework milestone.
 
+### Commands
+
+`ctx:command { "program", "arg", ... }` runs an argv-based child process, returning
+`output, status`. Standard output and error are combined and capped at 256 KiB.
+Arguments are passed directly to the program rather than through a shell.
+
+The current implementation waits synchronously, so use it only for short local
+commands and avoid calling it during render. A nonblocking, cancellable process API
+remains future work. `widgets/audio-outputs.lua` demonstrates querying and changing
+PipeWire outputs with `wpctl`.
+
 ## UI constructors
 
 `h.ui.box { ... }` and `h.ui.text { ... }` return node descriptions. Named fields
@@ -146,18 +157,25 @@ Use those measurements and `ctx.size` for sizing and alignment.
 
 ## Host presentation
 
-The normal canvas is content-only. The entire terminal, including row zero and the
-last row, belongs to the grid. `ctx.size` is the full widget allocation unless the
-layout enables `appearance.borders`, in which case the border consumes one cell
-on each side. Widget `title` is metadata and does not produce a title bar.
+The canvas is content-only in normal and edit modes. The entire terminal, including
+row zero and the last row, belongs to the grid. `ctx.size` is always the full widget
+allocation. Widget `title` is metadata and does not produce a title bar.
 
-Press `e` to enter layout-edit mode. Temporary outlines overlay the existing
-content without changing its size; drag inside a tile to move or its edges to
-resize in individual terminal cells. Saved edits use the current viewport as the
-reference grid, preserving exact cell placement when reopened at the same size.
-Press `b` while editing to persistently toggle borders for the dashboard.
-Escape cancels a gesture or exits editing. Widget code can also draw internal
-borders using ordinary box primitives.
+Press `e` to enter layout-edit mode. Hovering adds an absolute white overlay at 10%
+opacity over the widget's rendered area, brightening foreground and background
+while preserving glyphs and content dimensions. Hovering over an edge adds a
+brighter one-cell-wide strip as a resize handle. Corners highlight both adjacent
+edges at the same brightness. These handles are overlays rather than frame glyphs.
+
+Drag inside the highlighted widget to move it, or drag an edge/corner to resize in
+individual terminal cells. The content follows the gesture; an invalid destination
+has a red tint. Saved edits use the current viewport as the reference grid,
+preserving exact cell placement when reopened at the same size.
+
+Press `D` to delete the highlighted or currently dragged instance. Removal saves
+the layout and disposes its Lua scope and native UI nodes. Escape cancels a gesture
+or exits editing. Legacy layout `appearance` data is ignored on load and omitted
+on subsequent saves.
 
 ## Local modules and hot reload
 
@@ -169,6 +187,6 @@ The host checks widget files and successfully loaded local dependencies for chan
 every 500 ms, including atomic editor replacements. Press `r` to reload immediately.
 A candidate must pass loading, options validation, setup, and its first render
 before it replaces the working revision. Invalid edits preserve the prior widget
-and show a small error marker; enter layout-edit mode to read the diagnostic.
+and show a small error marker; hover over the widget in edit mode to read the diagnostic.
 Retained data survives successful replacement; ordinary
 captured locals initialize again.

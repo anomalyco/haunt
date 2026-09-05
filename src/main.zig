@@ -34,7 +34,7 @@ const Drag = struct {
     candidate: Rect,
     start_x: i32,
     start_y: i32,
-    edges: u4, // left, right, top, bottom; zero means move.
+    edges: u4 = 0, // left, right, top, bottom; zero moves the whole widget.
     valid: bool = true,
 };
 
@@ -46,7 +46,10 @@ const App = struct {
     renderer: *ot.CliRenderer,
     widgets: []Widget,
     selected: ?usize = null,
+    hovered: ?usize = null,
+    hovered_edges: u4 = 0,
     editing: bool = false,
+    needs_redraw: bool = false,
     drag: ?Drag = null,
     message: ?[]u8 = null,
 
@@ -79,11 +82,83 @@ const App = struct {
         const next = if (message) |value| try self.allocator.dupe(u8, value) else null;
         if (self.message) |previous| self.allocator.free(previous);
         self.message = next;
+        self.needs_redraw = true;
     }
 
-    fn contentRect(self: *App, allocation: Rect) Rect {
-        if (!self.layout.parsed.value.appearance.borders) return allocation;
-        return .{ .x = allocation.x + 1, .y = allocation.y + 1, .width = allocation.width -| 2, .height = allocation.height -| 2 };
+    fn setEditing(self: *App, editing: bool) void {
+        self.editing = editing;
+        self.hovered = null;
+        self.hovered_edges = 0;
+        self.drag = null;
+        self.needs_redraw = true;
+        self.renderer.disableMouse();
+        self.renderer.enableMouse(editing);
+    }
+
+    fn widgetAt(self: *App, x: u32, y: u32) ?usize {
+        for (0..self.widgets.len) |index| if (self.rect(index).contains(x, y)) return index;
+        return null;
+    }
+
+    fn updateHover(self: *App, mouse: input.Mouse) void {
+        if (!self.editing) return;
+        const next = self.widgetAt(mouse.x, mouse.y);
+        const edges = if (next) |index| edgesAt(self.rect(index), mouse) else 0;
+        if (self.hovered != next or self.hovered_edges != edges) {
+            self.hovered = next;
+            self.hovered_edges = edges;
+            self.needs_redraw = true;
+        }
+    }
+
+    fn edgesAt(region: Rect, mouse: input.Mouse) u4 {
+        var edges: u4 = 0;
+        if (region.width > 1 and mouse.x == region.x) edges |= 1;
+        if (mouse.x == region.x + region.width - 1) edges |= 2;
+        if (region.height > 1 and mouse.y == region.y) edges |= 4;
+        if (mouse.y == region.y + region.height - 1) edges |= 8;
+        return edges;
+    }
+
+    fn drawEdgeOverlay(buffer: *ot.OptimizedBuffer, region: Rect, edges: u4, color: ot.RGBA) void {
+        const opacity: f32 = 0.15;
+        const top: u32 = @intFromBool(edges & 4 != 0);
+        const bottom: u32 = @intFromBool(edges & 8 != 0);
+        if (top != 0) (ui.Overlay{ .rect = .{ .x = region.x, .y = region.y, .width = region.width, .height = 1 }, .color = color, .opacity = opacity }).draw(buffer);
+        if (bottom != 0) (ui.Overlay{ .rect = .{ .x = region.x, .y = region.y + region.height - 1, .width = region.width, .height = 1 }, .color = color, .opacity = opacity }).draw(buffer);
+        // Exclude corners already covered by a horizontal strip, so opacity stays uniform.
+        const side_height = region.height -| top -| bottom;
+        if (edges & 1 != 0) (ui.Overlay{ .rect = .{ .x = region.x, .y = region.y + top, .width = 1, .height = side_height }, .color = color, .opacity = opacity }).draw(buffer);
+        if (edges & 2 != 0) (ui.Overlay{ .rect = .{ .x = region.x + region.width - 1, .y = region.y + top, .width = 1, .height = side_height }, .color = color, .opacity = opacity }).draw(buffer);
+    }
+
+    fn deleteWidget(self: *App, index: usize) !void {
+        if (index >= self.widgets.len) return;
+        const id = self.layout.parsed.value.widgets[index].id;
+        const next = blk: {
+            const pending = try self.allocator.alloc(Widget, self.widgets.len - 1);
+            errdefer self.allocator.free(pending);
+            @memcpy(pending[0..index], self.widgets[0..index]);
+            @memcpy(pending[index..], self.widgets[index + 1 ..]);
+            try self.layout.removeWidget(self.file_io, index);
+            break :blk pending;
+        };
+
+        var cleanup_failed = false;
+        self.vm.remove(id) catch {
+            cleanup_failed = true;
+        };
+        self.widgets[index].deinit(self.allocator);
+        self.allocator.free(self.widgets);
+        self.widgets = next;
+        if (self.selected) |selected| {
+            self.selected = if (selected == index) null else if (selected > index) selected - 1 else selected;
+        }
+        self.hovered = null;
+        self.hovered_edges = 0;
+        self.drag = null;
+        self.needs_redraw = true;
+        try self.setMessage(if (cleanup_failed) self.vm.last_error else null);
     }
 
     fn rect(self: *App, index: usize) Rect {
@@ -94,7 +169,7 @@ const App = struct {
     fn reload(self: *App, index: usize) !void {
         const widget = &self.widgets[index];
         const definition = self.layout.parsed.value.widgets[index];
-        const content = self.contentRect(self.rect(index));
+        const content = self.rect(index);
         const ok = self.vm.load(definition.id, widget.path, definition.options, content.width, content.height) catch false;
         const next_error = if (ok) null else try self.allocator.dupe(u8, self.vm.last_error orelse "Unable to load widget");
         if (widget.error_message) |previous| self.allocator.free(previous);
@@ -167,76 +242,96 @@ const App = struct {
         buffer.drawTextBuffer(view, @intCast(region.x), @intCast(region.y));
     }
 
+    fn drawWidget(self: *App, buffer: *ot.OptimizedBuffer, index: usize, region: Rect) !void {
+        if (region.width == 0 or region.height == 0) return;
+        const widget = &self.widgets[index];
+        const dragging = if (self.drag) |drag| drag.index == index else false;
+        const highlighted = self.editing and (dragging or (self.drag == null and self.hovered == index));
+        if (dragging) buffer.fillRect(region.x, region.y, region.width, region.height, ui.background);
+        const L = self.vm.L;
+        const top = c.lua_gettop(L);
+        defer c.lua_settop(L, top);
+        try self.vm.frame(self.layout.parsed.value.widgets[index].id, region.width, region.height);
+        const message = (if (self.selected == index) self.message else null) orelse widget.error_message orelse
+            if (c.lua_type(L, -2) != c.LUA_TNIL) lua.string(L, -2) else null;
+        const has_content = c.lua_type(L, -4) == c.LUA_TTABLE;
+        if (has_content) {
+            const version = c.lua_tointegerx(L, -3, null);
+            if (widget.version != version) {
+                try widget.tree.sync(-4);
+                widget.version = version;
+            }
+            try widget.tree.draw(buffer, region);
+        }
+        if (message) |value| {
+            if (!has_content or highlighted) {
+                try self.drawDiagnostic(buffer, index, region, value);
+            } else {
+                try buffer.drawText("!", @intCast(region.x + region.width - 1), @intCast(region.y), ot.rgbColor(235, 111, 146, 255), ui.background, ot.TextAttributes.BOLD);
+            }
+        }
+        if (highlighted) {
+            const invalid = dragging and !self.drag.?.valid;
+            const color = if (invalid) ot.rgbColor(235, 111, 146, 255) else ot.rgbColor(255, 255, 255, 255);
+            (ui.Overlay{
+                .rect = region,
+                .color = color,
+                .opacity = if (invalid) 0.18 else 0.10,
+            }).draw(buffer);
+            drawEdgeOverlay(buffer, region, if (dragging) self.drag.?.edges else self.hovered_edges, color);
+        }
+    }
+
     fn draw(self: *App) !void {
         const buffer = self.renderer.getNextBuffer();
         buffer.clear(ui.background, null);
-        const L = self.vm.L;
-        for (self.widgets, 0..) |*widget, index| {
-            const outer = self.rect(index);
-            const content = self.contentRect(outer);
-            const top = c.lua_gettop(L);
-            defer c.lua_settop(L, top);
-            try self.vm.frame(self.layout.parsed.value.widgets[index].id, content.width, content.height);
-            const message = (if (self.selected == index) self.message else null) orelse widget.error_message orelse
-                if (c.lua_type(L, -2) != c.LUA_TNIL) lua.string(L, -2) else null;
-            if (outer.width == 0 or outer.height == 0) continue;
-            if (c.lua_type(L, -4) == c.LUA_TTABLE) {
-                const version = c.lua_tointegerx(L, -3, null);
-                if (widget.version != version) {
-                    try widget.tree.sync(-4);
-                    widget.version = version;
-                }
-                try widget.tree.draw(buffer, content);
-            } else if (message) |value| {
-                try self.drawDiagnostic(buffer, index, content, value);
-            }
-            if (self.editing or self.layout.parsed.value.appearance.borders) {
-                try buffer.drawBox(@intCast(outer.x), @intCast(outer.y), outer.width, outer.height, &ui.rounded, .{ .top = true, .right = true, .bottom = true, .left = true }, if (message != null) ot.rgbColor(235, 111, 146, 255) else if (self.editing and self.selected == index) ui.accent else ot.rgbColor(65, 65, 80, 255), ui.transparent, ui.muted, false, null, 0, null, 0);
-            }
-            if (message) |value| {
-                if (self.editing and outer.width > 2 and outer.height > 2) {
-                    // Diagnostics belong to the affected tile, rather than permanent app chrome.
-                    try self.drawDiagnostic(buffer, index, .{ .x = outer.x + 1, .y = outer.y + 1, .width = outer.width - 2, .height = outer.height - 2 }, value);
-                } else {
-                    try buffer.drawText("!", @intCast(outer.x + outer.width - 1), @intCast(outer.y), ot.rgbColor(235, 111, 146, 255), ui.background, ot.TextAttributes.BOLD);
-                }
-            }
+        for (0..self.widgets.len) |index| {
+            if (self.drag != null and self.drag.?.index == index) continue;
+            try self.drawWidget(buffer, index, self.rect(index));
         }
         if (self.drag) |drag| {
-            const ghost = drag.candidate;
-            try buffer.drawBox(@intCast(ghost.x), @intCast(ghost.y), ghost.width, ghost.height, &ui.rounded, .{ .top = true, .right = true, .bottom = true, .left = true }, if (drag.valid) ui.accent else ot.rgbColor(235, 111, 146, 255), ui.transparent, ui.accent, false, null, 0, null, 0);
+            try self.drawWidget(buffer, drag.index, drag.candidate);
         }
         _ = self.renderer.render(false);
     }
 
     fn handleMouse(self: *App, mouse: input.Mouse) !void {
+        self.updateHover(mouse);
         if (self.drag) |*drag| {
+            if (mouse.kind == .move and mouse.button == 3) {
+                self.drag = null;
+                self.needs_redraw = true;
+                return;
+            }
             const dx = @as(i32, @intCast(mouse.x)) - drag.start_x;
             const dy = @as(i32, @intCast(mouse.y)) - drag.start_y;
             const width = self.renderer.width;
             const height = self.renderer.height;
             const original = drag.original;
             var x: i32 = @intCast(original.x);
-            var y_pos: i32 = @intCast(original.y);
+            var y: i32 = @intCast(original.y);
             var right: i32 = @intCast(original.x + original.width);
             var bottom: i32 = @intCast(original.y + original.height);
             if (drag.edges == 0) {
                 x = std.math.clamp(x + dx, 0, @as(i32, @intCast(width - original.width)));
-                y_pos = std.math.clamp(y_pos + dy, 0, @as(i32, @intCast(height - original.height)));
+                y = std.math.clamp(y + dy, 0, @as(i32, @intCast(height - original.height)));
                 right = x + @as(i32, @intCast(original.width));
-                bottom = y_pos + @as(i32, @intCast(original.height));
+                bottom = y + @as(i32, @intCast(original.height));
             } else {
                 if (drag.edges & 1 != 0) x = std.math.clamp(x + dx, 0, right - 1);
                 if (drag.edges & 2 != 0) right = std.math.clamp(right + dx, x + 1, @as(i32, @intCast(width)));
-                if (drag.edges & 4 != 0) y_pos = std.math.clamp(y_pos + dy, 0, bottom - 1);
-                if (drag.edges & 8 != 0) bottom = std.math.clamp(bottom + dy, y_pos + 1, @as(i32, @intCast(height)));
+                if (drag.edges & 4 != 0) y = std.math.clamp(y + dy, 0, bottom - 1);
+                if (drag.edges & 8 != 0) bottom = std.math.clamp(bottom + dy, y + 1, @as(i32, @intCast(height)));
             }
-            drag.candidate = .{ .x = @intCast(x), .y = @intCast(y_pos), .width = @intCast(right - x), .height = @intCast(bottom - y_pos) };
-            const minimum: u32 = if (self.layout.parsed.value.appearance.borders) 3 else 1;
-            drag.valid = self.layout.parsed.value.fitsCells(drag.candidate, drag.index, width, height) and drag.candidate.width >= minimum and drag.candidate.height >= minimum;
+            const candidate = Rect{ .x = @intCast(x), .y = @intCast(y), .width = @intCast(right - x), .height = @intCast(bottom - y) };
+            if (!std.meta.eql(candidate, drag.candidate)) self.needs_redraw = true;
+            drag.candidate = candidate;
+            drag.valid = self.layout.parsed.value.fitsCells(candidate, drag.index, width, height);
             if (mouse.kind == .up) {
                 const completed = drag.*;
                 self.drag = null;
+                self.needs_redraw = true;
+                defer self.updateHover(mouse);
                 if (completed.valid) {
                     self.layout.placeCells(self.file_io, completed.index, completed.candidate, width, height) catch |err| {
                         try self.setMessage(@errorName(err));
@@ -251,14 +346,11 @@ const App = struct {
             const outer = self.rect(index);
             if (!outer.contains(mouse.x, mouse.y)) continue;
             if (mouse.kind == .down and mouse.button == 0) {
+                if (self.selected != index) self.needs_redraw = true;
                 self.selected = index;
                 if (self.editing) {
-                    var edges: u4 = 0;
-                    if (mouse.x == outer.x) edges |= 1;
-                    if (mouse.x == outer.x + outer.width - 1) edges |= 2;
-                    if (mouse.y == outer.y) edges |= 4;
-                    if (mouse.y == outer.y + outer.height - 1) edges |= 8;
-                    self.drag = .{ .index = index, .original = outer, .candidate = outer, .start_x = @intCast(mouse.x), .start_y = @intCast(mouse.y), .edges = edges };
+                    self.drag = .{ .index = index, .original = outer, .candidate = outer, .start_x = @intCast(mouse.x), .start_y = @intCast(mouse.y), .edges = edgesAt(outer, mouse) };
+                    self.needs_redraw = true;
                     return;
                 }
             }
@@ -332,20 +424,21 @@ const App = struct {
             .key => |key| switch (key) {
                 'q', 3 => return false,
                 27 => {
-                    if (self.drag != null) self.drag = null else self.editing = false;
+                    if (self.drag != null) {
+                        self.drag = null;
+                        self.needs_redraw = true;
+                    } else self.setEditing(false);
                 },
-                'e', 5 => {
-                    self.drag = null;
-                    self.editing = !self.editing;
-                },
-                'b' => {
+                'e', 5 => self.setEditing(!self.editing),
+                'd', 'D' => {
                     if (self.editing) {
-                        const previous = self.layout.parsed.value.appearance.borders;
-                        self.layout.parsed.value.appearance.borders = !previous;
-                        self.layout.save(self.file_io) catch |err| {
-                            self.layout.parsed.value.appearance.borders = previous;
-                            try self.setMessage(@errorName(err));
-                        };
+                        const target = if (self.drag) |drag| drag.index else self.hovered;
+                        if (target) |index| {
+                            self.selected = index;
+                            self.deleteWidget(index) catch |err| {
+                                try self.setMessage(@errorName(err));
+                            };
+                        }
                     } else try self.handleKey(key);
                 },
                 'r', 18 => {
@@ -353,10 +446,21 @@ const App = struct {
                 },
                 9 => {
                     if (self.widgets.len > 0) self.selected = if (self.selected) |index| (index + 1) % self.widgets.len else 0;
+                    self.needs_redraw = true;
                 },
                 else => if (!self.editing) try self.handleKey(key),
             },
             .mouse => |mouse| try self.handleMouse(mouse),
+            .focus => |focused| {
+                if (focused) {
+                    self.renderer.restoreTerminalModes();
+                } else {
+                    self.hovered = null;
+                    self.hovered_edges = 0;
+                    self.drag = null;
+                    self.needs_redraw = true;
+                }
+            },
         }
         return true;
     }
@@ -402,7 +506,7 @@ pub fn main(init: std.process.Init) !void {
             snapshot_size = .{ .width = width, .height = height };
         } else if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
             var out = std.Io.File.stdout().writer(init.io, &.{});
-            try out.interface.writeAll("Usage: haunt [layout.json] [--snapshot WIDTHxHEIGHT]\n\nDefault: examples/clock.json\ne: edit layout; drag inside a tile to move, edges/corners to resize\nb: toggle saved borders while editing; Escape: cancel/leave editing\nr: reload widgets; q / Ctrl+C: quit\n");
+            try out.interface.writeAll("Usage: haunt [layout.json] [--snapshot WIDTHxHEIGHT]\n\nDefault: examples/clock.json\ne: edit layout; hover to highlight, drag inside a widget to move\nHover an edge for a brighter resize handle; corners resize both axes\nD: delete the highlighted widget; Escape: cancel/leave editing\nr: reload widgets; q / Ctrl+C: quit\n");
             return;
         } else if (std.mem.startsWith(u8, arg, "-")) return error.UnknownArgument else path = arg;
     }
@@ -477,24 +581,25 @@ pub fn main(init: std.process.Init) !void {
             parser.feed(bytes[0..@intCast(count)]);
             while (parser.next()) |event| {
                 running = try app.handle(event);
-                redraw = true;
                 if (!running) break;
             }
         } else if (parser.flushEscape()) |event| {
             running = try app.handle(event);
-            redraw = true;
         }
         if (c.haunt_was_resized() != 0) {
             c.haunt_terminal_size(&width, &height);
             try renderer.resize(width, height);
             app.drag = null;
+            app.hovered = null;
+            app.hovered_edges = 0;
             redraw = true;
         }
         if (c.haunt_now() >= next_source_check) {
             redraw = try app.checkSources() or redraw;
             next_source_check = c.haunt_now() + 500;
         }
-        redraw = try vm.poll() or redraw;
+        redraw = try vm.poll() or app.needs_redraw or redraw;
+        app.needs_redraw = false;
         if (redraw and running) try app.draw();
     }
 }

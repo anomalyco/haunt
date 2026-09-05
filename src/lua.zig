@@ -53,6 +53,8 @@ pub const Vm = struct {
         var self = Vm{ .allocator = allocator, .L = L, .runtime = c.LUA_NOREF };
         errdefer self.deinit();
         c.luaL_openlibs(L);
+        c.lua_pushcclosure(L, c.haunt_lua_command, 0);
+        c.lua_setglobal(L, "_haunt_command");
         try self.eval("@haunt-ascii.lua", @embedFile("lua/ascii.lua"), 1);
         c.lua_createtable(L, 0, 7);
         inline for (@import("font_data").names, @import("font_data").sources) |name, source| {
@@ -136,6 +138,14 @@ pub const Vm = struct {
         try self.call(0, 1);
         defer pop(self.L, 1);
         return c.lua_toboolean(self.L, -1) != 0;
+    }
+
+    pub fn remove(self: *Vm, id: []const u8) !void {
+        const top = c.lua_gettop(self.L);
+        defer c.lua_settop(self.L, top);
+        self.method("remove");
+        pushString(self.L, id);
+        try self.call(1, 0);
     }
 
     pub fn nextDelay(self: *Vm) !c_int {

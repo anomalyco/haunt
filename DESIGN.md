@@ -17,9 +17,9 @@ primary unit is a widget with its own content and interaction.
 - A stable, directly editable grid. Users click, drag, and resize widgets.
 - All widget regions fit within one terminal viewport. Workspace scrolling is
   deferred.
-- The normal workspace is content-only: borders are optional, and application
-  headers, widget title bars, and footer/help text are absent. Layout editing uses
-  temporary overlays.
+- The workspace is content-only in normal and edit modes. Host frames, application
+  headers, widget title bars, and footer/help text are absent. Edit-mode hover uses
+  a low-opacity white overlay; brighter one-cell edge strips act as resize handles.
 - Data updates preserve widget positions and allocated sizes. Spatial memory is
   a core part of the experience.
 - Layouts are file-backed, serializable, and switchable. Widget instances have
@@ -37,10 +37,9 @@ primary unit is a widget with its own content and interaction.
 
 The workspace owns every widget instance's position and allocation. Each widget
 receives a content rectangle in terminal columns and rows and controls its internal
-presentation through the OpenTUI primitive API. Optional persistent borders are
-accounted for before computing that usable rectangle. Editing overlays preserve
-content dimensions. The grid uses the full viewport, including the first and last
-terminal rows.
+presentation through the OpenTUI primitive API. The usable rectangle is the entire
+allocation. Editing overlays preserve content dimensions. The grid uses the full
+viewport, including the first and last terminal rows.
 
 Direct manipulation snaps to individual terminal cells: one column horizontally
 and one row vertically. Gesture coordinates and collision checks use rendered cell
@@ -73,11 +72,14 @@ policy remains an implementation design question.
 The interaction target is immediate, discoverable mouse-based editing:
 
 1. Click a widget to focus/select it while preserving its content's own interactions.
-2. Enter layout-edit mode (`e`) and drag inside a tile to reposition it.
-3. Drag an outlined edge or corner to resize it.
-4. Show the cell-aligned destination and whether it fits during the gesture.
-5. Commit a valid placement on release; Escape cancels the gesture.
-6. Save completed edits automatically.
+2. Enter layout-edit mode (`e`) and hover to brighten a widget with a white overlay.
+3. Drag inside the widget to move it. Hover an edge for a brighter one-cell-wide
+   resize handle; dragging a corner resizes both dimensions.
+4. Preview the actual content at the cell-aligned destination; tint invalid
+   destinations red.
+5. Commit a valid placement on release; Escape cancels the gesture or exits editing.
+6. Press `D` to delete the highlighted or dragged widget instance.
+7. Save completed moves, resizes, and deletions automatically.
 
 The host owns drag/resize input capture so a gesture can continue across widget
 boundaries. Widget code handles content-area input. Moving and resizing preserve
@@ -87,24 +89,22 @@ The workspace enforces bounds and non-overlap. Content changes do not trigger
 automatic repacking. The occupied-cell interaction, including whether a drop
 previews a swap, still needs to be finalized. Empty grid space is allowed.
 
-### Frame presentation
+### Edit-mode presentation
 
-Frames are an optional host-owned wrapper, controlled by the dashboard-wide
-`appearance.borders` setting in the layout file. The default is borderless.
-Widget authors can rely on Haunt to provide the outer frame when the user wants it.
+The host has no border setting or edit outlines. Hovering places an absolute white
+layer at low opacity over the full widget, brightening its text and background
+without changing glyphs, dimensions, or widget state. Hovered edges get an additional
+brighter one-cell strip. A corner combines its adjacent strips without double
+applying opacity to the corner cell.
 
-- A bordered dashboard applies consistent outer frames across its widget instances.
-- A borderless dashboard gives each widget its full allocated content rectangle.
-- Layout-edit mode temporarily overlays outlines and resize handles. Entering this
-  mode preserves content dimensions and running state; editing overlays capture
-  layout gestures. `b` toggles and saves persistent borders while editing.
-- Content-area borders remain ordinary widget primitives for internal sections.
-- Treat frame drawing as a host presentation wrapper, independent of the widget's
-  application logic. Host ownership does not require a hardcoded visual style.
+Hover redraws occur when the highlighted widget or edge changes; movement within
+one region does not continually redraw an otherwise idle dashboard. Gesture
+previews reuse these overlays and move/resize the actual content.
 
-The prototype implements borderless presentation, optional outlines without title
-bars, temporary edit overlays, and full-viewport placement. Errors use an affected
-tile's marker/diagnostic rather than a permanent status bar.
+Errors use an affected widget's marker/hover diagnostic. Deleting an instance
+disposes its resource scope and native nodes after the layout is saved. A failed
+save preserves the instance. Legacy `appearance` metadata is discarded when loading
+older layouts and omitted from new saves.
 
 ## Saved layouts and widget instances
 

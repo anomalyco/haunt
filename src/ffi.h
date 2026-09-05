@@ -18,4 +18,5 @@ double haunt_now(void);
 int64_t haunt_file_stamp(const char *path);
 int haunt_lua_pcall(lua_State *L, int arguments, int results);
 int haunt_lua_now(lua_State *L);
+int haunt_lua_command(lua_State *L);
 #endif

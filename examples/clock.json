@@ -3,18 +3,18 @@
   "id": "clock",
   "name": "Clock fonts",
   "grid": {
-    "columns": 12,
-    "rows": 12
+    "columns": 271,
+    "rows": 75
   },
   "widgets": [
     {
-      "id": "local-clock",
+      "id": "clock-block",
       "widget": "../widgets/clock.lua",
       "rect": {
-        "x": 0,
-        "y": 0,
-        "width": 3,
-        "height": 1
+        "x": 45,
+        "y": 3,
+        "width": 31,
+        "height": 4
       },
       "options": {
         "timezone": "local",
@@ -22,91 +22,26 @@
       }
     },
     {
-      "id": "clock-block",
-      "widget": "../widgets/clock.lua",
+      "id": "audio-outputs",
+      "widget": "../widgets/audio-outputs.lua",
       "rect": {
-        "x": 0,
-        "y": 1,
-        "width": 6,
-        "height": 2
+        "x": 39,
+        "y": 25,
+        "width": 38,
+        "height": 3
       },
-      "options": {
-        "timezone": "local",
-        "font": "block"
-      }
+      "options": {}
     },
     {
-      "id": "clock-shade",
-      "widget": "../widgets/clock.lua",
+      "id": "calendar",
+      "widget": "../widgets/calendar.lua",
       "rect": {
-        "x": 0,
-        "y": 3,
-        "width": 6,
-        "height": 2
-      },
-      "options": {
-        "timezone": "local",
-        "font": "shade"
-      }
-    },
-    {
-      "id": "clock-slick",
-      "widget": "../widgets/clock.lua",
-      "rect": {
-        "x": 0,
-        "y": 5,
-        "width": 12,
-        "height": 1
-      },
-      "options": {
-        "timezone": "local",
-        "font": "slick"
-      }
-    },
-    {
-      "id": "clock-huge",
-      "widget": "../widgets/clock.lua",
-      "rect": {
-        "x": 0,
-        "y": 6,
-        "width": 12,
-        "height": 2
-      },
-      "options": {
-        "timezone": "local",
-        "font": "huge"
-      }
-    },
-    {
-      "id": "clock-grid",
-      "widget": "../widgets/clock.lua",
-      "rect": {
-        "x": 0,
-        "y": 8,
-        "width": 12,
-        "height": 2
-      },
-      "options": {
-        "timezone": "local",
-        "font": "grid"
-      }
-    },
-    {
-      "id": "clock-pallet",
-      "widget": "../widgets/clock.lua",
-      "rect": {
-        "x": 0,
+        "x": 43,
         "y": 10,
-        "width": 12,
-        "height": 2
+        "width": 31,
+        "height": 13
       },
-      "options": {
-        "timezone": "local",
-        "font": "pallet"
-      }
+      "options": {}
     }
-  ],
-  "appearance": {
-    "borders": false
-  }
+  ]
 }

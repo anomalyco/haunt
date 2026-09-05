@@ -63,6 +63,12 @@ function M.new(now)
       for index = 1, values.n do values[index] = tostring(values[index]) end
       entry.log = table.concat(values, " ")
     end
+    function ctx:command(arguments)
+      assert(type(arguments) == "table", "command expects an argument array")
+      local output, status = _haunt_command(arguments)
+      assert(output, status)
+      return output, status
+    end
     return ctx
   end
 

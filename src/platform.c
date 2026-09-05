@@ -4,7 +4,10 @@
 #include <limits.h>
 #include <poll.h>
 #include <signal.h>
+#include <stdlib.h>
+#include <string.h>
 #include <sys/ioctl.h>
+#include <sys/wait.h>
 #include <sys/stat.h>
 #include <termios.h>
 #include <time.h>
@@ -114,4 +117,98 @@ int haunt_lua_pcall(lua_State *L, int arguments, int results) {
 int haunt_lua_now(lua_State *L) {
     lua_pushnumber(L, haunt_now());
     return 1;
+}
+
+int haunt_lua_command(lua_State *L) {
+    luaL_checktype(L, 1, LUA_TTABLE);
+    size_t count = lua_rawlen(L, 1);
+    if (count == 0 || count > 128) {
+        lua_pushnil(L);
+        lua_pushliteral(L, "command requires 1-128 arguments");
+        return 2;
+    }
+    char **argv = calloc(count + 1, sizeof(char *));
+    if (!argv) {
+        lua_pushnil(L);
+        lua_pushliteral(L, "out of memory");
+        return 2;
+    }
+    for (size_t index = 0; index < count; index++) {
+        lua_geti(L, 1, (lua_Integer)index + 1);
+        size_t length = 0;
+        const char *value = lua_tolstring(L, -1, &length);
+        if (!value || memchr(value, 0, length)) {
+            lua_pop(L, 1);
+            free(argv);
+            lua_pushnil(L);
+            lua_pushliteral(L, "command arguments must be strings without NUL bytes");
+            return 2;
+        }
+        argv[index] = (char *)value;
+        lua_pop(L, 1);
+    }
+
+    int output[2];
+    if (pipe(output) != 0) {
+        free(argv);
+        lua_pushnil(L);
+        lua_pushstring(L, strerror(errno));
+        return 2;
+    }
+    pid_t child = fork();
+    if (child == 0) {
+        close(output[0]);
+        dup2(output[1], STDOUT_FILENO);
+        dup2(output[1], STDERR_FILENO);
+        close(output[1]);
+        execvp(argv[0], argv);
+        _exit(127);
+    }
+    close(output[1]);
+    free(argv);
+    if (child < 0) {
+        close(output[0]);
+        lua_pushnil(L);
+        lua_pushstring(L, strerror(errno));
+        return 2;
+    }
+
+    const size_t limit = 256 * 1024;
+    char *collected = malloc(limit);
+    if (!collected) {
+        kill(child, SIGKILL);
+        close(output[0]);
+        waitpid(child, NULL, 0);
+        lua_pushnil(L);
+        lua_pushliteral(L, "out of memory");
+        return 2;
+    }
+    char chunk[4096];
+    size_t total = 0;
+    for (;;) {
+        ssize_t length = read(output[0], chunk, sizeof(chunk));
+        if (length == 0) break;
+        if (length < 0) {
+            if (errno == EINTR) continue;
+            break;
+        }
+        if (total + (size_t)length > limit) {
+            kill(child, SIGKILL);
+            close(output[0]);
+            waitpid(child, NULL, 0);
+            free(collected);
+            lua_pushnil(L);
+            lua_pushliteral(L, "command output exceeded 256 KiB");
+            return 2;
+        }
+        memcpy(collected + total, chunk, (size_t)length);
+        total += (size_t)length;
+    }
+    close(output[0]);
+    int status = 0;
+    while (waitpid(child, &status, 0) < 0 && errno == EINTR) {}
+    lua_pushlstring(L, collected, total);
+    free(collected);
+    lua_pushinteger(L, WIFEXITED(status) ? WEXITSTATUS(status) : 128 + WTERMSIG(status));
+    return 2;
 }

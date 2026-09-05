@@ -15,6 +15,40 @@ const single = [_]u32{ '┌', '┐', '└', '┘', '─', '│', '┬', '┴', '
 const double = [_]u32{ '╔', '╗', '╚', '╝', '═', '║', '╦', '╩', '╠', '╣', '╬' };
 const all_sides: ot.buffer.BorderSides = .{ .top = true, .right = true, .bottom = true, .left = true };
 
+/// An absolute compositing layer: tint both color planes without changing glyphs,
+/// wide-character continuations, attributes, links, or the widget's layout.
+pub const Overlay = struct {
+    rect: Rect,
+    color: ot.RGBA = ot.rgbColor(255, 255, 255, 255),
+    opacity: f32 = 0.10,
+
+    pub fn draw(self: Overlay, buffer: *ot.OptimizedBuffer) void {
+        const alpha: u32 = @intFromFloat(std.math.clamp(self.opacity, 0, 1) * @as(f32, @floatFromInt(ot.ansi.alpha(self.color))));
+        if (alpha == 0 or self.rect.x >= buffer.width or self.rect.y >= buffer.height) return;
+        const right = @min(buffer.width, self.rect.x + self.rect.width);
+        const bottom = @min(buffer.height, self.rect.y + self.rect.height);
+        const fg = buffer.getFgPtr();
+        const bg = buffer.getBgPtr();
+        for (self.rect.y..bottom) |row| {
+            for (self.rect.x..right) |column| {
+                const index = row * buffer.width + column;
+                fg[index] = self.blend(fg[index], alpha);
+                bg[index] = self.blend(bg[index], alpha);
+            }
+        }
+    }
+
+    fn blend(self: Overlay, underneath: ot.RGBA, alpha: u32) ot.RGBA {
+        const inverse = 255 - alpha;
+        return ot.rgbColor(
+            @intCast((@as(u32, ot.ansi.red(underneath)) * inverse + @as(u32, ot.ansi.red(self.color)) * alpha + 127) / 255),
+            @intCast((@as(u32, ot.ansi.green(underneath)) * inverse + @as(u32, ot.ansi.green(self.color)) * alpha + 127) / 255),
+            @intCast((@as(u32, ot.ansi.blue(underneath)) * inverse + @as(u32, ot.ansi.blue(self.color)) * alpha + 127) / 255),
+            255,
+        );
+    }
+};
+
 fn fieldString(L: *c.lua_State, index: c_int, name: [:0]const u8, fallback: []const u8) []const u8 {
     _ = c.lua_getfield(L, index, name);
     defer lua.pop(L, 1);

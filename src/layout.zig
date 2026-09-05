@@ -22,7 +22,6 @@ pub const Rect = struct {
 };
 
 pub const Grid = struct { columns: u32, rows: u32 };
-pub const Appearance = struct { borders: bool = false };
 pub const Widget = struct {
     id: []const u8,
     widget: []const u8,
@@ -35,7 +34,6 @@ pub const Document = struct {
     name: []const u8,
     grid: Grid,
     widgets: []Widget,
-    appearance: Appearance = .{},
 
     pub fn fits(self: Document, rect: Rect, skip: ?usize) bool {
         if (!rect.fitsWithin(self.grid.columns, self.grid.rows)) return false;
@@ -99,12 +97,19 @@ pub const Layout = struct {
         defer allocator.free(absolute);
         const owned_path = try allocator.dupeZ(u8, absolute);
         errdefer allocator.free(owned_path);
-        const source = try std.Io.Dir.cwd().readFileAlloc(io, owned_path, allocator, .limited(1024 * 1024));
+        const original_source = try std.Io.Dir.cwd().readFileAlloc(io, owned_path, allocator, .limited(1024 * 1024));
+        defer allocator.free(original_source);
+        var document = try std.json.parseFromSlice(std.json.Value, allocator, original_source, .{});
+        defer document.deinit();
+        if (document.value != .object) return error.InvalidLayout;
+        // Accept older layouts, but retire their host-frame settings on the next save.
+        _ = document.value.object.orderedRemove("appearance");
+        const source = try std.json.Stringify.valueAlloc(allocator, document.value, .{});
         errdefer allocator.free(source);
         const parsed = try std.json.parseFromSlice(Document, allocator, source, .{});
         errdefer parsed.deinit();
         try parsed.value.validate();
-        return .{ .allocator = allocator, .path = owned_path, .source = source, .parsed = parsed, .disk_hash = std.hash.Wyhash.hash(0, source) };
+        return .{ .allocator = allocator, .path = owned_path, .source = source, .parsed = parsed, .disk_hash = std.hash.Wyhash.hash(0, original_source) };
     }
 
     pub fn deinit(self: *Layout) void {
@@ -152,5 +157,19 @@ pub const Layout = struct {
         errdefer std.Io.Dir.cwd().deleteFile(io, temporary) catch {};
         try std.Io.Dir.renameAbsolute(temporary, self.path, io);
         self.disk_hash = std.hash.Wyhash.hash(0, encoded);
+    }
+
+    pub fn removeWidget(self: *Layout, io: std.Io, index: usize) !void {
+        const original = self.parsed.value.widgets;
+        if (index >= original.len) return error.InvalidWidget;
+        const removed = original[index];
+        std.mem.copyForwards(Widget, original[index .. original.len - 1], original[index + 1 ..]);
+        self.parsed.value.widgets = original[0 .. original.len - 1];
+        errdefer {
+            std.mem.copyBackwards(Widget, original[index + 1 ..], original[index .. original.len - 1]);
+            original[index] = removed;
+            self.parsed.value.widgets = original;
+        }
+        try self.save(io);
     }
 };

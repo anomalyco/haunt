@@ -6,7 +6,7 @@ pub const Mouse = struct {
     x: u32,
     y: u32,
 };
-pub const Event = union(enum) { key: u32, mouse: Mouse };
+pub const Event = union(enum) { key: u32, mouse: Mouse, focus: bool };
 
 /// Incremental parser: terminal replies and fragmented escape sequences never become keystrokes.
 pub const Parser = struct {
@@ -56,6 +56,10 @@ pub const Parser = struct {
                 while (end < self.length and (self.buffer[end] < 0x40 or self.buffer[end] > 0x7e)) : (end += 1) {}
                 if (end == self.length) return null;
                 const final = self.buffer[end];
+                if (end == 2 and (final == 'I' or final == 'O')) {
+                    self.consume(end + 1);
+                    return .{ .focus = final == 'I' };
+                }
                 if (end > 3 and self.buffer[2] == '<' and (final == 'M' or final == 'm')) {
                     const mouse = parseMouse(self.buffer[3..end], final == 'm');
                     self.consume(end + 1);
