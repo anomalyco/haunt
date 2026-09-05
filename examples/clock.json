@@ -1,7 +1,7 @@
 {
   "version": 1,
   "id": "clock",
-  "name": "Clock",
+  "name": "Clock fonts",
   "grid": {
     "columns": 12,
     "rows": 12
@@ -11,14 +11,102 @@
       "id": "local-clock",
       "widget": "../widgets/clock.lua",
       "rect": {
-        "x": 1,
-        "y": 7,
+        "x": 0,
+        "y": 0,
         "width": 3,
+        "height": 1
+      },
+      "options": {
+        "timezone": "local",
+        "font": "tiny"
+      }
+    },
+    {
+      "id": "clock-block",
+      "widget": "../widgets/clock.lua",
+      "rect": {
+        "x": 0,
+        "y": 1,
+        "width": 6,
         "height": 2
       },
       "options": {
-        "timezone": "local"
+        "timezone": "local",
+        "font": "block"
+      }
+    },
+    {
+      "id": "clock-shade",
+      "widget": "../widgets/clock.lua",
+      "rect": {
+        "x": 0,
+        "y": 3,
+        "width": 6,
+        "height": 2
+      },
+      "options": {
+        "timezone": "local",
+        "font": "shade"
+      }
+    },
+    {
+      "id": "clock-slick",
+      "widget": "../widgets/clock.lua",
+      "rect": {
+        "x": 0,
+        "y": 5,
+        "width": 12,
+        "height": 1
+      },
+      "options": {
+        "timezone": "local",
+        "font": "slick"
+      }
+    },
+    {
+      "id": "clock-huge",
+      "widget": "../widgets/clock.lua",
+      "rect": {
+        "x": 0,
+        "y": 6,
+        "width": 12,
+        "height": 2
+      },
+      "options": {
+        "timezone": "local",
+        "font": "huge"
+      }
+    },
+    {
+      "id": "clock-grid",
+      "widget": "../widgets/clock.lua",
+      "rect": {
+        "x": 0,
+        "y": 8,
+        "width": 12,
+        "height": 2
+      },
+      "options": {
+        "timezone": "local",
+        "font": "grid"
+      }
+    },
+    {
+      "id": "clock-pallet",
+      "widget": "../widgets/clock.lua",
+      "rect": {
+        "x": 0,
+        "y": 10,
+        "width": 12,
+        "height": 2
+      },
+      "options": {
+        "timezone": "local",
+        "font": "pallet"
       }
     }
-  ]
+  ],
+  "appearance": {
+    "borders": false
+  }
 }

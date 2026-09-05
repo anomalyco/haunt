@@ -18,10 +18,13 @@ ignored local directories. Python 3.12+ is needed for bootstrap. The application
 a native executable with embedded Lua. The current prototype targets POSIX
 terminals, with Linux x86_64 as the initial development platform.
 
-The clock displays twelve-hour time using OpenTUI's ASCII fonts. It chooses `block`
-when the tile has room and `tiny` for smaller tiles, with a plain-text fallback for
-very small allocations. Options include local/UTC time, a custom format, font,
-color, and an opt-in date. Edit `widgets/clock.lua` while Haunt runs to see it reload.
+The clock displays twelve-hour time with seconds using a fixed OpenTUI ASCII font.
+Its `font` option chooses `tiny`, `block`, `shade`, `slick`, `huge`, `grid`, or
+`pallet`; resizing keeps that font unchanged and clips content that does not fit.
+The default dashboard places one clock in each font, in that order from top to
+bottom. Options also include local/UTC time, a custom format, color, and an opt-in
+date. Edit `widgets/clock.lua` while Haunt runs to see it reload. Restart Haunt after
+editing the layout file to load new instances or options.
 
 The normal workspace shows widget content across the entire terminal, with no
 title bars or footer. Controls are available when you need them:

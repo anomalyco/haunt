@@ -47,8 +47,9 @@ widget-local errors.
 - `h.field.enum(values, default, description?)`
 
 Use `ctx.options` to read the resulting plain Lua table. The clock supports
-`timezone` (`"local"` or `"UTC"`), `format` (default `%I:%M %p`), `font` (default
-`auto`), `color`, and `showDate` (default `false`).
+`timezone` (`"local"` or `"UTC"`), `format` (default `%I:%M:%S %p`), `font` (default
+`tiny`), `color`, and `showDate` (default `false`). The font is a fixed per-instance
+choice: resizing never substitutes another font or a plain-text presentation.
 
 ## Timers and lifecycle
 
@@ -140,7 +141,7 @@ font size. Other layout properties and stable keys work as on a text primitive.
 The initial binding applies a single foreground color to the font's segments.
 
 `h.ascii.measure { text = "4:07", font = "block" }` returns `{ width, height }`.
-Use those measurements and `ctx.size` to choose an appropriate presentation.
+Use those measurements and `ctx.size` for sizing and alignment.
 `h.ascii.render` returns the same dimensions plus the rendered `content` string.
 
 ## Host presentation
